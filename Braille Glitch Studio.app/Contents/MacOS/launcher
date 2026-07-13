@@ -1,3 +1,5 @@
 #!/bin/bash
+exec > /private/tmp/bgs-launcher.log 2>&1
+echo "=== launch $(date) ==="
 cd "$(dirname "$0")/../../.." || exit 1
 exec /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 main.py
