@@ -20,7 +20,12 @@ a = Analysis(
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
-    excludes=[],
+    # The studio never plays audio files, loads images from disk, or does
+    # MIDI — pygame guards all of these with MissingModule placeholders, so
+    # excluding them just drops SDL2_mixer/SDL2_image and their codec dylibs
+    # from the bundle.
+    excludes=['pygame.mixer', 'pygame.mixer_music', 'pygame.imageext',
+              'pygame.scrap', 'pygame.midi', 'pygame.freetype', 'pygame._sdl2'],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
@@ -51,6 +56,8 @@ app = BUNDLE(
         'NSCameraUsageDescription':
             'Braille Glitch Studio uses your webcam for the live glitch renderer.',
         'NSCameraUseContinuityCameraDeviceType': True,
+        'NSMicrophoneUsageDescription':
+            'The audio-reactive mode drives the glitch with your microphone level.',
         'NSHighResolutionCapable': True,
     },
 )

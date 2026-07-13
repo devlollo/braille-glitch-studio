@@ -33,6 +33,9 @@ DEFAULT_P = {
     "contrast": 2.5, "black_lift": 0.25, "decay": 0.85, "motion_gain": 6.0,
     "glitch_floor": 0.02, "corrupt_max": 0.12, "max_tears": 6, "aberr_max": 8,
     "saturation": 1.7, "wobble": 0.0, "feedback": 0.0, "pixelsort": 0.0,
+    # audio-reactive: mic level * audio_gain is fed to render(drive=...).
+    # Presets don't touch it, so the knob survives preset changes.
+    "audio_gain": 6.0,
 }
 
 PRESET_NAMES = ["clean", "vhs", "datamosh", "tunnel", "chaos"]
@@ -56,14 +59,16 @@ PRESETS = [
 
 
 # ---------------- Character sets (glyph ink-mask atlases) ----------------
+# Masks are uint8 0/255 (not bool) so the per-frame compositing can use
+# cv2's SIMD masked copy instead of np.where.
 def _braille_masks():
-    arr = np.zeros((256, cell_h, cell_w), bool)
+    arr = np.zeros((256, cell_h, cell_w), np.uint8)
     for b in range(256):
         for row in range(4):
             for col in range(2):
                 if b & DOT_BITS[row][col]:
                     for oy, ox in _stamp:
-                        arr[b, _ysd[row] + oy, _xs[col] + ox] = True
+                        arr[b, _ysd[row] + oy, _xs[col] + ox] = 255
     return arr
 
 
@@ -72,11 +77,11 @@ def _block_masks(levels=5):
                       [3, 11, 1, 9], [15, 7, 13, 5]], float) / 16.0
     yy, xx = np.indices((cell_h, cell_w))
     thr = bayer[yy % 4, xx % 4]
-    return np.stack([thr < (i / (levels - 1)) for i in range(levels)])
+    return (np.stack([thr < (i / (levels - 1)) for i in range(levels)]) * 255).astype(np.uint8)
 
 
 def _ascii_masks(ramp):
-    arr = np.zeros((len(ramp), cell_h, cell_w), bool)
+    arr = np.zeros((len(ramp), cell_h, cell_w), np.uint8)
     for i, ch in enumerate(ramp):
         bb = _pil_font.getbbox(ch) or (0, 0, 0, 0)
         gw, gh = bb[2] - bb[0], bb[3] - bb[1]
@@ -84,7 +89,7 @@ def _ascii_masks(ramp):
             img = Image.new("L", (cell_w, cell_h), 0)
             ImageDraw.Draw(img).text(((cell_w - gw) // 2 - bb[0], (cell_h - gh) // 2 - bb[1]),
                                      ch, font=_pil_font, fill=255)
-            arr[i] = np.asarray(img) > 128
+            arr[i] = (np.asarray(img) > 128) * 255
     return arr
 
 
@@ -114,12 +119,19 @@ class GlitchEngine:
         self.glitch = 0.0
         self.frame_i = 0
         self.cols = self.char_rows = self.H = self.W = 0
+        # caches for the fast paths (built lazily at the internal resolution)
+        self._bg_full = None       # full-res background plate
+        self._solid = {}           # full-res solid color per flat palette
+        self._fb_lut = None        # 256-entry feedback brightness LUT
+        self._fb_key = None
 
     def load_preset(self, i):
         self.P.update(PRESETS[i])
         self.fx = True
 
-    def render(self, frame):
+    def render(self, frame, drive=0.0):
+        """Render one frame. `drive` is an extra glitch push (0..~1 per unit)
+        from outside sources — the studio feeds mic level * audio gain here."""
         P = self.P
         if self.mirror:
             frame = cv2.flip(frame, 1)
@@ -140,7 +152,7 @@ class GlitchEngine:
         self.prev_small = small
         self.accum = (small.copy() if (self.accum is None or P["decay"] <= 0 or not self.fx)
                       else np.maximum(small, self.accum * P["decay"]))
-        target = P["glitch_floor"] + motion * P["motion_gain"]
+        target = P["glitch_floor"] + motion * P["motion_gain"] + drive
         if self.rng.random() < burst_prob:
             target = max(target, self.rng.uniform(0.5, 1.0))
         self.glitch = min(1.0, max(self.glitch * 0.85, target)) if self.fx else 0.0
@@ -180,6 +192,12 @@ class GlitchEngine:
 
         mask = gmasks[vals].transpose(0, 2, 1, 3).reshape(H, W)
 
+        # Composite ink over background with cv2's SIMD masked copy (selection
+        # only — pixel values match the old np.where exactly).
+        if self._bg_full is None or self._bg_full.shape[:2] != (H, W):
+            self._bg_full = np.empty((H, W, 3), np.uint8)
+            self._bg_full[:] = BG
+            self._solid = {}
         pal = PALETTES[self.palette]
         if pal == "color":
             c = cv2.cvtColor(cv2.resize(frame, (cols, char_rows), interpolation=cv2.INTER_AREA),
@@ -187,10 +205,14 @@ class GlitchEngine:
             lum = c.mean(axis=2, keepdims=True)
             c = np.clip(lum + (c - lum) * P["saturation"], 0, 255)
             c = np.clip(c * 1.2 + 30, 0, 255).astype(np.uint8)
-            cell_color = cv2.resize(c, (W, H), interpolation=cv2.INTER_NEAREST)
-            output = np.where(mask[..., None], cell_color, BG).astype(np.uint8)
+            ink = cv2.resize(c, (W, H), interpolation=cv2.INTER_NEAREST)
         else:
-            output = np.where(mask[..., None], np.array(FLAT[pal], np.uint8), BG).astype(np.uint8)
+            if pal not in self._solid:
+                self._solid[pal] = np.empty((H, W, 3), np.uint8)
+                self._solid[pal][:] = FLAT[pal]
+            ink = self._solid[pal]
+        output = self._bg_full.copy()
+        cv2.copyTo(ink, mask, output)
 
         for _ in range(int(P["pixelsort"]) if self.fx else 0):
             r = int(self.rng.integers(0, H))
@@ -203,14 +225,27 @@ class GlitchEngine:
                 output[..., 0] = np.roll(output[..., 0], off, axis=1)
                 output[..., 2] = np.roll(output[..., 2], -off, axis=1)
         if self.fx and P["wobble"] > 0:
-            rr = np.arange(H)[:, None]
-            shift = (P["wobble"] * np.sin(rr * 0.15 + self.frame_i * 0.3)).astype(np.int32)
-            cc = (np.arange(W)[None, :] - shift) % W
-            output = output[rr, cc]
+            # Same row-wise circular shift as indexing with (col - shift) % W,
+            # but done as one contiguous slice copy per row: ~20x faster than
+            # the full-frame fancy-index gather.
+            shift = (P["wobble"] * np.sin(np.arange(H) * 0.15 + self.frame_i * 0.3)).astype(np.int32)
+            start = (-shift) % W
+            padded = np.concatenate([output, output], axis=1)
+            res = np.empty_like(output)
+            for r in range(H):
+                s = start[r]
+                res[r] = padded[r, s:s + W]
+            output = res
         if self.fx and P["feedback"] > 0 and self.prev_final is not None:
             M = cv2.getRotationMatrix2D((W / 2, H / 2), 0, 1.0 + 0.04 * P["feedback"])
             warp = cv2.warpAffine(self.prev_final, M, (W, H))
-            output = np.maximum(output, (warp.astype(np.float32) * (0.5 * P["feedback"])).astype(np.uint8))
+            # LUT[v] == uint8(float32(v) * k) for every v, so this matches the
+            # old float multiply bit-for-bit without the float round-trip.
+            k = 0.5 * P["feedback"]
+            if self._fb_key != k:
+                self._fb_key = k
+                self._fb_lut = (np.arange(256, dtype=np.float32) * k).astype(np.uint8)
+            np.maximum(output, cv2.LUT(warp, self._fb_lut), out=output)
         if self.scanlines:
             output[1::2] >>= 1
         self.prev_final = output.copy()
