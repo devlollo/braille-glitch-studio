@@ -8,6 +8,8 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
+            // pin the interpreter so F5 works no matter what is selected
+            "python": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -17,6 +19,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/video_glitch.py",
             "args": ["input.mp4", "output.mp4"],
+            "python": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
             "console": "integratedTerminal",
             "justMyCode": true
         }
