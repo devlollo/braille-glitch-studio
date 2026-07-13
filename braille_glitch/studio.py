@@ -4,6 +4,13 @@ All image processing lives in engine.GlitchEngine — this module is only the
 host: camera capture, the window, the control panel, and the stats overlay.
 Launch via main.py (running this file directly breaks the relative import).
 """
+if __package__ in (None, ""):
+    raise SystemExit(
+        "studio.py is a module inside the braille_glitch package and can't be run "
+        "directly.\nRun the app with:  python3 main.py   (in VS Code: press F5, "
+        "or open main.py and hit play)."
+    )
+
 import time
 from collections import deque
 

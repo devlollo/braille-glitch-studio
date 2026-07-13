@@ -1,0 +1,24 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // F5 (or Run > Start Debugging) always launches the studio via
+            // main.py, no matter which file is open in the editor.
+            "name": "Braille Glitch Studio",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Video glitch (edit args)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/video_glitch.py",
+            "args": ["input.mp4", "output.mp4"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}

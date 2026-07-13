@@ -1,0 +1,6 @@
+{
+    // This project runs on the python.org framework build (has pygame-ce,
+    // opencv-python-headless, sounddevice installed) — NOT the system
+    // /usr/bin/python3, which the user-level default points to.
+    "python.defaultInterpreterPath": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3"
+}
