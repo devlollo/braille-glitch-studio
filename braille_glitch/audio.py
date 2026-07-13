@@ -18,7 +18,9 @@ except (ImportError, OSError):
 
 
 class MicLevel:
-    def __init__(self, samplerate=22050, blocksize=512):
+    def __init__(self, samplerate=None, blocksize=512):
+        # samplerate=None -> the device's default rate; forcing one (e.g.
+        # 22050) makes stream-open fail on mics that don't support it.
         self.level = 0.0                    # smoothed envelope, ~0..1
         self.available = sd is not None
         self._samplerate = samplerate
@@ -40,8 +42,9 @@ class MicLevel:
             self._stream.start()
             return True
         except Exception:
+            # transient failure (mic busy, device switching, permission not
+            # yet granted) — stay available so the user can just retry
             self._stream = None
-            self.available = False
             return False
 
     def stop(self):
@@ -55,8 +58,12 @@ class MicLevel:
         self.level = 0.0
 
     def _callback(self, indata, frames, time_info, status):
+        if frames == 0:
+            return
         rms = float(np.sqrt(np.mean(indata[:, 0] ** 2)))
         x = min(1.0, rms * 8.0)             # speech/music RMS is roughly 0.02-0.3
+        if not np.isfinite(x):
+            return                          # a nan here would stick in the envelope forever
         if x > self.level:
             self.level = self.level * 0.4 + x * 0.6    # fast attack
         else:

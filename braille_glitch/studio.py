@@ -53,6 +53,10 @@ pil_font = ImageFont.load_default()
 def text_surf(s, color=(220, 220, 220)):
     key = (s, color)
     if key not in _text_cache:
+        if len(_text_cache) > 600:
+            # stats strings ("frame: 12.3 ms", ...) are new almost every
+            # frame; without a cap the cache grows for the whole session
+            _text_cache.clear()
         if _pyfont is not None:
             _text_cache[key] = _pyfont.render(s, True, color)
         else:
@@ -78,7 +82,9 @@ tog_y0 = PY + PAD + len(KNOBS) * ROW + 6
 TOGGLE_ORDER = ["fx", "charset", "palette", "scanlines", "invert", "audio"]
 toggle_rects = {name: pygame.Rect(PX + PAD, tog_y0 + i * ROW, 150, 18)
                 for i, name in enumerate(TOGGLE_ORDER)}
-PANEL_H = tog_y0 + len(TOGGLE_ORDER) * ROW + PAD - PY
+HINT_LINES = ["TAB hide · SPACE bypass · A audio",
+              "1-5 presets · I stats · ESC quit"]
+PANEL_H = tog_y0 + len(TOGGLE_ORDER) * ROW + PAD - PY + 16 * len(HINT_LINES)
 
 
 def draw_panel(screen, engine, mic):
@@ -98,7 +104,7 @@ def draw_panel(screen, engine, mic):
     if not mic.available:
         audio_label = "audio: unavailable"
     elif mic.running:
-        audio_label = "audio: on  " + "|" * int(mic.level * 8 + 0.5)
+        audio_label = "audio: on  " + "|" * int(mic.level * 7 + 0.5)
     else:
         audio_label = "audio: off"
     labels = {
@@ -119,8 +125,9 @@ def draw_panel(screen, engine, mic):
         pygame.draw.rect(screen, bg, rect)
         pygame.draw.rect(screen, (90, 100, 90), rect, 1)
         screen.blit(text_surf(labels[name]), (rect.x + 5, rect.y + 3))
-    screen.blit(text_surf("TAB hide · SPACE bypass · A audio · 1-5 presets · I stats · ESC quit", (140, 150, 140)),
-                (PX + PAD, PY + PANEL_H - 14))
+    for i, line in enumerate(HINT_LINES):
+        screen.blit(text_surf(line, (140, 150, 140)),
+                    (PX + PAD, PY + PANEL_H - 16 * (len(HINT_LINES) - i) + 2))
 
 
 def set_knob_from_mouse(P, k, mx):

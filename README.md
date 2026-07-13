@@ -21,7 +21,8 @@ everything is live-tweakable from an on-screen control panel.
 
 ## Requirements
 
-Python 3.11+ (developed on 3.14).
+The python.org **3.14 framework build** (`/Library/Frameworks/Python.framework`)
+— the launcher apps, VS Code configs, and packaging all point at it explicitly.
 
 ```sh
 pip install -r requirements.txt
@@ -90,6 +91,9 @@ If the camera prompt ever stops appearing after a rebuild:
   of headroom to spare.
 - Audio-reactive mode (`A`) needs microphone permission the first time; sound
   level is added to the motion-driven glitch, so hits and beats tear the image.
+- After touching `braille_glitch/engine.py`, run `python3 tests/parity_test.py`
+  (proves output is bit-identical to the legacy reference pipeline) and
+  `python3 tests/bench.py` (per-effect frame cost).
 - The renderer works at a small internal resolution and upscales, so it stays
   fast even fullscreen.
 - Video output is **silent**; to keep the source audio, mux it back with ffmpeg
