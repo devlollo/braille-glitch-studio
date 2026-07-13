@@ -8,7 +8,7 @@ the note printed at the end for how to keep the original soundtrack.
 """
 import sys
 import cv2
-from braille_glitch.engine import GlitchEngine, CHARSET_NAMES, PALETTES, PRESET_NAMES, PRESETS
+from glitch_core import GlitchEngine, CHARSET_NAMES, PALETTES, PRESET_NAMES, PRESETS
 
 # ---- Look (edit these) ----
 CHARSET = "braille"    # braille | blocks | ascii | dense

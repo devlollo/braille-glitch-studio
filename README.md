@@ -8,12 +8,16 @@ everything is live-tweakable from an on-screen control panel.
 
 ## What's here
 
-- **`braille_glitch_studio.py`** — the live app: webcam in, glitched braille/ASCII
-  out, with a draggable knob panel, presets, and a stats overlay.
-- **`glitch_core.py`** — the whole effect pipeline as a reusable, window-free
-  `GlitchEngine` class.
+- **`main.py`** — the entry point: run this (or double-click the app, below).
+- **`braille_glitch/engine.py`** — the whole effect pipeline as a reusable,
+  window-free `GlitchEngine` class. The single source of truth for every effect.
+- **`braille_glitch/studio.py`** — the live app: webcam in, glitched
+  braille/ASCII out, with a draggable knob panel, presets, and a stats overlay.
+  Pure UI host — all processing goes through `GlitchEngine`.
 - **`video_glitch.py`** — run a video *file* through the same effect and write a
   new video.
+- **`packaging/`** — scripts that build the two double-clickable apps.
+- **`legacy/`** — verbatim backups of the original pre-restructure scripts.
 
 ## Requirements
 
@@ -28,13 +32,22 @@ Note: this uses **pygame-ce** (not stock `pygame` — its wheel was missing the
 
 ## Run
 
-Live studio:
+**Double-click** `Braille Glitch Studio.app` in the repo folder — no terminal
+needed. The first launch asks for camera permission. (This is the lightweight
+dev launcher: it runs the code live from this folder with the system Python,
+so edits take effect on the next launch. Rebuild it anytime with
+`packaging/make_dev_launcher.sh`.)
+
+From the terminal, the same thing is:
 
 ```sh
-python3 braille_glitch_studio.py
+python3 main.py
 ```
 
-Process a video:
+(Always launch via `main.py` — running `braille_glitch/studio.py` directly
+breaks the package imports.)
+
+Process a video (terminal only for now):
 
 ```sh
 python3 video_glitch.py input.mp4 output.mp4
@@ -42,6 +55,18 @@ python3 video_glitch.py input.mp4 output.mp4
 
 Edit the settings block at the top of `video_glitch.py` to change the look
 (charset / palette / preset / resolution).
+
+## Build a standalone app
+
+`packaging/build_app.sh` builds a fully self-contained
+`dist/Braille Glitch Studio.app` with PyInstaller — Python and all
+dependencies bundled inside. Drag it to /Applications; it keeps working even
+if the system Python changes. Launch it from Finder (not the terminal) so
+macOS attributes the camera permission to the app.
+
+If the camera prompt ever stops appearing after a rebuild:
+`tccutil reset Camera com.egs.brailleglitchstudio` (bundled app) or
+`tccutil reset Camera com.egs.brailleglitchstudio.dev` (dev launcher).
 
 ## Controls (studio)
 
