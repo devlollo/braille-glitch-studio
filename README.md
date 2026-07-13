@@ -75,6 +75,7 @@ If the camera prompt ever stops appearing after a rebuild:
 | `TAB` | show / hide the control panel |
 | `I` | stats + FPS overlay |
 | `SPACE` | effects on / off (bypass) |
+| `A` | audio-reactive mode — the mic level drives the glitch (tune with the *audio gain* knob) |
 | `V` | cycle character set — braille / blocks / ascii / dense |
 | `C` | cycle palette — color / b&w / green / amber |
 | `S` | scanlines · `F` fullscreen |
@@ -85,7 +86,10 @@ If the camera prompt ever stops appearing after a rebuild:
 ## Notes
 
 - Frame rate is **camera-bound** (~30 fps on a built-in FaceTime camera) — the
-  effects run with plenty of headroom to spare.
+  full pipeline costs ~7 ms/frame even with every effect on, so there is a lot
+  of headroom to spare.
+- Audio-reactive mode (`A`) needs microphone permission the first time; sound
+  level is added to the motion-driven glitch, so hits and beats tear the image.
 - The renderer works at a small internal resolution and upscales, so it stays
   fast even fullscreen.
 - Video output is **silent**; to keep the source audio, mux it back with ffmpeg

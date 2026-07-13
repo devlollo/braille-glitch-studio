@@ -12,6 +12,7 @@ import cv2
 from PIL import Image, ImageDraw, ImageFont
 
 from .engine import GlitchEngine, CHARSETS, PALETTES
+from .audio import MicLevel
 
 target_cols = 90      # internal resolution, scaled up to the window
 
@@ -29,6 +30,7 @@ KNOBS = [
     ("wobble", "vhs wobble", 0.0, 25.0, False),
     ("feedback", "feedback zoom", 0.0, 1.0, False),
     ("pixelsort", "pixel sort", 0.0, 20.0, True),
+    ("audio_gain", "audio gain", 0.0, 15.0, False),
 ]
 
 # ---------------- Panel text: real pygame.font, with a PIL fallback ----------------
@@ -66,13 +68,13 @@ for i, (k, *_r) in enumerate(KNOBS):
     y = PY + PAD + i * ROW
     track_rects[k] = pygame.Rect(TRACK_X, y + 2, TRACK_W, TRACK_H)
 tog_y0 = PY + PAD + len(KNOBS) * ROW + 6
-TOGGLE_ORDER = ["fx", "charset", "palette", "scanlines", "invert"]
+TOGGLE_ORDER = ["fx", "charset", "palette", "scanlines", "invert", "audio"]
 toggle_rects = {name: pygame.Rect(PX + PAD, tog_y0 + i * ROW, 150, 18)
                 for i, name in enumerate(TOGGLE_ORDER)}
 PANEL_H = tog_y0 + len(TOGGLE_ORDER) * ROW + PAD - PY
 
 
-def draw_panel(screen, engine):
+def draw_panel(screen, engine, mic):
     panel = pygame.Surface((PANEL_W, PANEL_H), pygame.SRCALPHA)
     panel.fill((0, 0, 0, 150))
     screen.blit(panel, (PX, PY))
@@ -86,22 +88,31 @@ def draw_panel(screen, engine):
         pygame.draw.rect(screen, (230, 230, 230), (tr.x + int(tr.w * frac) - 2, tr.y - 2, 4, tr.h + 4))
         val = f"{int(engine.P[k])}" if is_int else f"{engine.P[k]:.2f}"
         screen.blit(text_surf(val), (VAL_X, y))
+    if not mic.available:
+        audio_label = "audio: unavailable"
+    elif mic.running:
+        audio_label = "audio: on  " + "|" * int(mic.level * 8 + 0.5)
+    else:
+        audio_label = "audio: off"
     labels = {
         "fx": f"effects: {'ON' if engine.fx else 'OFF (bypass)'}",
         "charset": f"charset: {CHARSETS[engine.charset][0]}",
         "palette": f"palette: {PALETTES[engine.palette]}",
         "scanlines": f"scanlines: {'on' if engine.scanlines else 'off'}",
         "invert": f"invert: {'on' if engine.invert else 'off'}",
+        "audio": audio_label,
     }
     for name, rect in toggle_rects.items():
         if name == "fx":
             bg = (30, 75, 40) if engine.fx else (85, 30, 30)
+        elif name == "audio" and mic.running:
+            bg = (30, 75, 40)
         else:
             bg = (40, 45, 40)
         pygame.draw.rect(screen, bg, rect)
         pygame.draw.rect(screen, (90, 100, 90), rect, 1)
         screen.blit(text_surf(labels[name]), (rect.x + 5, rect.y + 3))
-    screen.blit(text_surf("TAB hide · SPACE bypass · 1-5 presets · I stats · ESC quit", (140, 150, 140)),
+    screen.blit(text_surf("TAB hide · SPACE bypass · A audio · 1-5 presets · I stats · ESC quit", (140, 150, 140)),
                 (PX + PAD, PY + PANEL_H - 14))
 
 
@@ -155,6 +166,7 @@ def run_studio():
 
     # mirror=True: the live studio shows a selfie view (video processing doesn't)
     engine = GlitchEngine(target_cols=target_cols, mirror=True)
+    mic = MicLevel()
 
     panel_visible = True
     stats_visible = False
@@ -186,6 +198,8 @@ def run_studio():
                     engine.charset = (engine.charset + 1) % len(CHARSETS)
                 elif e.key == pygame.K_s:
                     engine.scanlines = not engine.scanlines
+                elif e.key == pygame.K_a:
+                    mic.stop() if mic.running else mic.start()
                 elif e.key == pygame.K_SPACE:
                     engine.fx = not engine.fx
                 elif pygame.K_1 <= e.key <= pygame.K_5:
@@ -212,6 +226,8 @@ def run_studio():
                     engine.scanlines = not engine.scanlines
                 elif toggle_rects["invert"].collidepoint(mx, my):
                     engine.invert = not engine.invert
+                elif toggle_rects["audio"].collidepoint(mx, my):
+                    mic.stop() if mic.running else mic.start()
             elif e.type == pygame.MOUSEBUTTONUP and e.button == 1:
                 dragging = None
             elif e.type == pygame.MOUSEMOTION and dragging:
@@ -224,13 +240,14 @@ def run_studio():
             continue
         ih, iw = frame.shape[:2]
 
-        output = engine.render(frame)
+        drive = mic.level * engine.P["audio_gain"] if mic.running else 0.0
+        output = engine.render(frame, drive)
 
         t_proc1 = time.perf_counter()
         surf = pygame.image.frombuffer(output.tobytes(), (engine.W, engine.H), "RGB")
         screen.blit(pygame.transform.scale(surf, screen.get_size()), (0, 0))
         if panel_visible:
-            draw_panel(screen, engine)
+            draw_panel(screen, engine, mic)
         if stats_visible:
             ww, wh = screen.get_size()
             draw_stats(screen, [
@@ -244,6 +261,7 @@ def run_studio():
                 f"window: {ww}x{wh}",
                 f"charset: {CHARSETS[engine.charset][0]}   palette: {PALETTES[engine.palette]}",
                 f"fx: {'ON' if engine.fx else 'BYPASS'}   glitch: {engine.glitch:.2f}",
+                f"audio: {mic.level:.2f}" if mic.running else "audio: off",
             ], ft_hist)
         pygame.display.flip()
         t_draw1 = time.perf_counter()
@@ -253,5 +271,6 @@ def run_studio():
         ft_hist.append((t_draw1 - frame_start) * 1000)
         clock.tick(60)
 
+    mic.stop()
     camera.release()
     pygame.quit()

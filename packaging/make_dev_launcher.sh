@@ -61,6 +61,8 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <string>Braille Glitch Studio uses your webcam for the live glitch renderer.</string>
     <key>NSCameraUseContinuityCameraDeviceType</key>
     <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>The audio-reactive mode drives the glitch with your microphone level.</string>
     <key>NSDesktopFolderUsageDescription</key>
     <string>The studio's code lives in a folder on your Desktop; the launcher needs to read it.</string>
     <key>NSDocumentsFolderUsageDescription</key>
